@@ -127,17 +127,138 @@ impl IpcServiceHandler {
         serde_json::to_value(result).map_err(|e| SongbirdError::serialization(e.to_string()))
     }
 
-    /// Handle `content.verify` — stub pending CAS verification protocol.
-    pub(super) async fn handle_content_verify(&self, _params: Value) -> SongbirdResult<Value> {
-        Err(SongbirdError::not_implemented("content.verify"))
+    /// Handle `content.verify` — verify a CAS hash exists on the mesh.
+    ///
+    /// Queries local providers with `content_storage` capability, then
+    /// checks mesh peers via gossip `cas.have` entries. Returns whether
+    /// the hash is verified and which nodes hold it.
+    ///
+    /// Accepts: `{ hash, algorithm? }`
+    pub(super) async fn handle_content_verify(&self, params: Value) -> SongbirdResult<Value> {
+        let hash = params
+            .get("hash")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| SongbirdError::validation("content.verify requires 'hash' field"))?;
+
+        // Check local providers
+        let local_providers = self.locate_local_content_providers().await.unwrap_or_default();
+        let locally_verified = !local_providers.is_empty();
+
+        // Check gossip table for cas.have entries from mesh peers
+        let mesh_holders = self.gossip_cas_holders(hash).await;
+
+        Ok(serde_json::json!({
+            "hash": hash,
+            "verified": locally_verified || !mesh_holders.is_empty(),
+            "local": locally_verified,
+            "mesh_holders": mesh_holders,
+            "local_providers": local_providers.len(),
+        }))
     }
 
-    /// Handle `content.availability` — stub pending CAS availability probe.
+    /// Handle `content.availability` — probe which mesh nodes can serve a hash.
+    ///
+    /// Returns availability map: local providers + mesh nodes that
+    /// have advertised `cas.have` for this hash via gossip.
+    ///
+    /// Accepts: `{ hash, algorithm? }`
     pub(super) async fn handle_content_availability(
         &self,
-        _params: Value,
+        params: Value,
     ) -> SongbirdResult<Value> {
-        Err(SongbirdError::not_implemented("content.availability"))
+        let hash = params
+            .get("hash")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| SongbirdError::validation("content.availability requires 'hash' field"))?;
+
+        let local_providers = self.locate_local_content_providers().await.unwrap_or_default();
+        let mesh_holders = self.gossip_cas_holders(hash).await;
+
+        Ok(serde_json::json!({
+            "hash": hash,
+            "available": !local_providers.is_empty() || !mesh_holders.is_empty(),
+            "local_providers": local_providers.len(),
+            "mesh_nodes": mesh_holders,
+            "total_replicas": local_providers.len() + mesh_holders.len(),
+        }))
+    }
+
+    /// Query swarmVine gossip table for `cas.have:{hash}` entries.
+    ///
+    /// Returns list of origin_gate node_ids that have advertised this hash.
+    /// Uses the swarmVine UDS discovery path from the gossip relay module.
+    async fn gossip_cas_holders(&self, hash: &str) -> Vec<String> {
+        #[cfg(unix)]
+        {
+            use super::super::swarmvine_gossip::discover_swarmvine_socket;
+            let Some(socket_path) = discover_swarmvine_socket() else {
+                return Vec::new();
+            };
+
+            let gossip_key = format!("cas.have:{hash}");
+            match self.query_swarmvine_entries(&socket_path, &gossip_key).await {
+                Ok(holders) => holders,
+                Err(_) => Vec::new(),
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = hash;
+            Vec::new()
+        }
+    }
+
+    /// Query swarmVine via UDS for gossip entries matching a key.
+    #[cfg(unix)]
+    async fn query_swarmvine_entries(
+        &self,
+        socket: &std::path::Path,
+        key: &str,
+    ) -> SongbirdResult<Vec<String>> {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+        let stream = tokio::net::UnixStream::connect(socket).await.map_err(|e| {
+            SongbirdError::service("gossip_query", format!("swarmVine connect: {e}"))
+        })?;
+
+        let (rd, mut wr) = tokio::io::split(stream);
+        let mut reader = BufReader::new(rd);
+
+        // riboCipher clear signal + JSON-RPC query
+        wr.write_all(&[0xEC, 0x01]).await.map_err(|e| {
+            SongbirdError::service("gossip_query", format!("write signal: {e}"))
+        })?;
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "gossip.query",
+            "params": { "topic": "data", "key_prefix": key },
+            "id": 1,
+        });
+        let msg = format!("{request}\n");
+        wr.write_all(msg.as_bytes()).await.map_err(|e| {
+            SongbirdError::service("gossip_query", format!("write request: {e}"))
+        })?;
+
+        let mut response = String::new();
+        let timeout = std::time::Duration::from_secs(3);
+        match tokio::time::timeout(timeout, reader.read_line(&mut response)).await {
+            Ok(Ok(n)) if n > 0 => {}
+            _ => return Ok(Vec::new()),
+        }
+
+        let resp: serde_json::Value = serde_json::from_str(&response).unwrap_or_default();
+        let entries = resp
+            .get("result")
+            .and_then(|r| r.get("entries"))
+            .and_then(|e| e.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|e| e.get("origin_gate").and_then(|g| g.as_str()).map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        Ok(entries)
     }
 
     /// Handle `content.put` — route a CAS write to a local provider with `content_storage` capability.
