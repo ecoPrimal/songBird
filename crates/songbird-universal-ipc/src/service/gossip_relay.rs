@@ -482,6 +482,233 @@ impl IpcServiceHandler {
         (spread_count, failures)
     }
 
+    /// Handle `gossip.query` — query local swarmVine for gossip entries by topic/key prefix.
+    ///
+    /// This formalizes the ad-hoc UDS queries that content.rs and other modules
+    /// were doing manually. Provides a proper JSON-RPC interface.
+    ///
+    /// Params:
+    /// - `topic` (string): gossip topic to query (e.g. "defense", "data")
+    /// - `key_prefix` (string, optional): filter entries by key prefix
+    ///
+    /// Returns `{entries: [{key, payload, origin_gate, timestamp}]}`.
+    pub(super) async fn handle_gossip_query(&self, params: Value) -> Result<Value, String> {
+        let topic = params
+            .get("topic")
+            .and_then(Value::as_str)
+            .ok_or("Missing required field: topic")?;
+
+        let key_prefix = params
+            .get("key_prefix")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+
+        #[cfg(unix)]
+        {
+            use super::swarmvine_gossip::discover_swarmvine_socket;
+            let Some(socket_path) = discover_swarmvine_socket() else {
+                return Ok(json!({
+                    "entries": [],
+                    "status": "swarmvine_unavailable"
+                }));
+            };
+
+            use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+            use tokio::net::UnixStream;
+
+            let rpc = json!({
+                "jsonrpc": "2.0",
+                "method": "gossip.query",
+                "params": { "topic": topic, "key_prefix": key_prefix },
+                "id": 1
+            });
+
+            let timeout_dur = Duration::from_secs(3);
+            match tokio::time::timeout(timeout_dur, UnixStream::connect(&socket_path)).await {
+                Ok(Ok(stream)) => {
+                    let (reader, mut writer) = stream.into_split();
+                    let _ = writer.write_all(&[0xEC, 0x01]).await;
+                    let msg = format!("{rpc}\n");
+                    let _ = writer.write_all(msg.as_bytes()).await;
+
+                    let mut response = String::new();
+                    let mut buf_reader = BufReader::new(reader);
+                    match tokio::time::timeout(timeout_dur, buf_reader.read_line(&mut response)).await {
+                        Ok(Ok(n)) if n > 0 => {
+                            let resp: Value = serde_json::from_str(&response).unwrap_or_default();
+                            let entries = resp
+                                .get("result")
+                                .and_then(|r| r.get("entries"))
+                                .cloned()
+                                .unwrap_or(json!([]));
+                            Ok(json!({
+                                "entries": entries,
+                                "topic": topic,
+                                "status": "ok"
+                            }))
+                        }
+                        _ => Ok(json!({
+                            "entries": [],
+                            "status": "timeout"
+                        })),
+                    }
+                }
+                Ok(Err(e)) => Ok(json!({
+                    "entries": [],
+                    "status": format!("connect_error: {e}")
+                })),
+                Err(_) => Ok(json!({
+                    "entries": [],
+                    "status": "timeout"
+                })),
+            }
+        }
+
+        #[cfg(not(unix))]
+        {
+            let _ = (topic, key_prefix);
+            Ok(json!({
+                "entries": [],
+                "status": "not_available"
+            }))
+        }
+    }
+
+    /// Handle `gossip.pool` — communal immunity pooling.
+    ///
+    /// Queries the local swarmVine gossip table for ALL entries with topic
+    /// "defense" and key prefix "epitope.feed:", then merges them into a
+    /// unified immune surface.
+    ///
+    /// This is the inversion: every membrane contact point calls `gossip.pool`
+    /// to get the combined behavioral genetics from across the entire mesh.
+    /// Each node's epitope feed (their local observations) gets mixed with
+    /// every other node's observations, creating communal immunity.
+    ///
+    /// Returns:
+    /// ```json
+    /// {
+    ///   "schema": "ecoPrimals/communal-immunity/v1",
+    ///   "pool_size": 3,
+    ///   "nodes": ["sporeGate", "golgiBody", "northGate"],
+    ///   "merged_clusters": [...],
+    ///   "cluster_overlap": {...},
+    ///   "coverage": {...}
+    /// }
+    /// ```
+    pub(super) async fn handle_gossip_pool(&self, _params: Value) -> Result<Value, String> {
+        // Query local gossip for all epitope feeds from the mesh
+        let query_result = self.handle_gossip_query(json!({
+            "topic": "defense",
+            "key_prefix": "epitope.feed:"
+        })).await?;
+
+        let entries = query_result
+            .get("entries")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        // Merge epitope clusters from all contributing nodes
+        let mut all_clusters: Vec<Value> = Vec::new();
+        let mut contributing_nodes: Vec<String> = Vec::new();
+        let mut total_observations: u64 = 0;
+        let mut total_subgroups: u64 = 0;
+
+        for entry in &entries {
+            let payload = entry.get("payload").cloned().unwrap_or_default();
+
+            let node_id = payload
+                .get("node_id")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown")
+                .to_string();
+
+            contributing_nodes.push(node_id.clone());
+
+            if let Some(clusters) = payload.get("epitope_clusters").and_then(Value::as_array) {
+                for cluster in clusters {
+                    let mut enriched = cluster.clone();
+                    if let Some(obj) = enriched.as_object_mut() {
+                        obj.insert("origin_node".to_string(), json!(node_id));
+                    }
+                    all_clusters.push(enriched);
+                }
+            }
+
+            if let Some(pop) = payload.get("population") {
+                total_observations += pop
+                    .get("total_observations")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                total_subgroups += pop
+                    .get("total_subgroups")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+            }
+        }
+
+        // Compute cluster overlap — which epitope hashes appear from multiple nodes
+        let mut hash_sources: std::collections::HashMap<String, Vec<String>> =
+            std::collections::HashMap::new();
+        for cluster in &all_clusters {
+            if let Some(hash) = cluster.get("hash").and_then(Value::as_str) {
+                let origin = cluster
+                    .get("origin_node")
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown");
+                hash_sources
+                    .entry(hash.to_string())
+                    .or_default()
+                    .push(origin.to_string());
+            }
+        }
+
+        let multi_node_clusters: Vec<Value> = hash_sources
+            .iter()
+            .filter(|(_, sources)| sources.len() > 1)
+            .map(|(hash, sources)| {
+                json!({
+                    "epitope_hash": hash,
+                    "seen_by": sources,
+                    "confirmation_count": sources.len(),
+                })
+            })
+            .collect();
+
+        let unique_hashes: std::collections::HashSet<&str> = all_clusters
+            .iter()
+            .filter_map(|c| c.get("hash").and_then(Value::as_str))
+            .collect();
+
+        Ok(json!({
+            "schema": "ecoPrimals/communal-immunity/v1",
+            "generated_epoch": now,
+            "pool_size": contributing_nodes.len(),
+            "nodes": contributing_nodes,
+            "merged_clusters": all_clusters,
+            "cluster_overlap": {
+                "multi_node_confirmations": multi_node_clusters,
+                "confirmed_count": multi_node_clusters.len(),
+            },
+            "coverage": {
+                "total_unique_epitopes": unique_hashes.len(),
+                "total_cluster_entries": all_clusters.len(),
+                "total_observations": total_observations,
+                "total_subgroups": total_subgroups,
+            },
+            "usage": "Epitopes confirmed by multiple nodes have highest confidence. \
+                      Feed these into your local classifier with weight proportional \
+                      to confirmation_count. Single-node epitopes are local signals; \
+                      multi-node epitopes are mesh-confirmed fleet signatures.",
+        }))
+    }
+
     /// Inject a gossip payload into the local swarmVine via UDS.
     ///
     /// Uses swarmVine's expected `0xEC 0x01` preamble followed by JSON-RPC.

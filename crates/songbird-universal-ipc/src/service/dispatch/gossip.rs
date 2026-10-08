@@ -26,6 +26,8 @@ pub(super) async fn dispatch_gossip(
         JsonRpcMethod::Gossip(GossipMethod::Subscribe) => {
             handler.handle_gossip_subscribe(params).await
         }
+        JsonRpcMethod::Gossip(GossipMethod::Query) => handler.handle_gossip_query(params).await,
+        JsonRpcMethod::Gossip(GossipMethod::Pool) => handler.handle_gossip_pool(params).await,
         other => Err(format!("Unknown gossip method: {other}")),
     }
 }

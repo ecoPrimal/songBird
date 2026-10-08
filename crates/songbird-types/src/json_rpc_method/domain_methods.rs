@@ -280,6 +280,15 @@ pub enum GossipMethod {
     /// `gossip.subscribe` — register interest in a gossip topic. When gossip arrives
     /// on the subscribed topic, songBird delivers it to the subscriber's endpoint.
     Subscribe,
+    /// `gossip.query` — query gossip entries by topic and key prefix.
+    /// Returns matching entries from the local swarmVine gossip table.
+    /// Used by content.verify (cas.have), defense inversion (epitope.feed), etc.
+    Query,
+    /// `gossip.pool` — communal immunity pooling. Queries the mesh for all
+    /// `defense` topic entries (epitope feeds from peer forges) and merges them
+    /// into a unified immune surface. Each membrane contact point can call this
+    /// to get the combined behavioral genetics across the entire mesh.
+    Pool,
 }
 
 /// `punch.*`
