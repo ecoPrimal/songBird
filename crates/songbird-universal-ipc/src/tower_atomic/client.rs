@@ -36,11 +36,19 @@ impl TowerAtomicClient {
     pub async fn connect_unix_path(path: &Path) -> IpcResult<Self> {
         debug!("Tower Atomic: connecting to Unix socket {}", path.display());
 
-        let stream = tokio::net::UnixStream::connect(path).await.map_err(|e| {
+        let mut stream = tokio::net::UnixStream::connect(path).await.map_err(|e| {
             IpcError::ConnectionFailed(format!(
                 "Failed to connect to Unix socket at {}: {e}",
                 path.display()
             ))
+        })?;
+
+        // Send riboCipher clear-tier signal before any JSON-RPC traffic.
+        // This identifies the connection as a protocol-aware client to
+        // the receiving primal (bearDog, sweetGrass, etc.).
+        use songbird_types::constants::ribocipher;
+        stream.write_all(&ribocipher::CLEAR_PREFIX).await.map_err(|e| {
+            IpcError::ConnectionFailed(format!("Failed to send riboCipher signal: {e}"))
         })?;
 
         Ok(Self {
