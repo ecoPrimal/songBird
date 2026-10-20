@@ -27,7 +27,9 @@ pub mod protocol;
 pub mod server;
 
 // Re-export the main types for convenience
-pub use protocol::{JsonRpcError, JsonRpcRequest, JsonRpcResponse};
+pub use protocol::{
+    JsonRpcError, JsonRpcErrorExt, JsonRpcRequest, JsonRpcResponse, JsonRpcResponseExt,
+};
 
 #[cfg(unix)]
 pub use server::UnixSocketServer;

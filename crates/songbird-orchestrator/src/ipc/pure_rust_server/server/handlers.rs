@@ -11,7 +11,9 @@ use songbird_types::{JsonRpcMethod, normalize_json_rpc_method_name};
 
 use super::super::coordination_handlers;
 use super::super::method_gate::{CallerContext, dispatch_auth_method, extract_bearer_token};
-use super::super::protocol::{JsonRpcError, JsonRpcRequest, JsonRpcResponse};
+use super::super::protocol::{
+    JsonRpcError, JsonRpcErrorExt, JsonRpcRequest, JsonRpcResponse, JsonRpcResponseExt,
+};
 use super::UnixSocketServer;
 
 impl UnixSocketServer {
@@ -26,8 +28,9 @@ impl UnixSocketServer {
 
         if request.jsonrpc != "2.0" {
             return JsonRpcResponse::error(
-                JsonRpcError::invalid_request(r#"Invalid Request: jsonrpc must be "2.0""#),
                 id,
+                JsonRpcError::INVALID_REQUEST,
+                r#"Invalid Request: jsonrpc must be "2.0""#,
             );
         }
 
@@ -44,11 +47,11 @@ impl UnixSocketServer {
 
         // JH-0: Pre-dispatch method gate authorization
         if let Some(auth_result) = dispatch_auth_method(&request.method, &self.gate, &caller) {
-            return JsonRpcResponse::success(auth_result, id);
+            return JsonRpcResponse::success(id, auth_result);
         }
 
         if let Err(gate_err) = self.gate.check(&request.method, &caller) {
-            return JsonRpcResponse::error(gate_err, id);
+            return JsonRpcResponse::error_from(gate_err, id);
         }
 
         let normalized = normalize_json_rpc_method_name(&request.method);
@@ -178,8 +181,8 @@ impl UnixSocketServer {
         };
 
         match result {
-            Ok(value) => JsonRpcResponse::success(value, id),
-            Err(error) => JsonRpcResponse::error(error, id),
+            Ok(value) => JsonRpcResponse::success(id, value),
+            Err(error) => JsonRpcResponse::error_from(error, id),
         }
     }
 }

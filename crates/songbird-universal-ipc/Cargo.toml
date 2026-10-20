@@ -73,6 +73,9 @@ songbird-universal = { path = "../songbird-universal" }
 # Canonical primal identifiers
 songbird-types = { path = "../songbird-types" }
 
+# Canonical ecosystem types (shared JSON-RPC, health, discovery)
+cellmembrane-types = { workspace = true }
+
 # Crypto provider (BearDog delegation — signs IPC registrations)
 songbird-crypto-provider = { path = "../songbird-crypto-provider" }
 

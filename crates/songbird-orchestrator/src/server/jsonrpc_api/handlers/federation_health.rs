@@ -5,7 +5,7 @@ use serde_json::Value;
 use tracing::debug;
 
 use super::super::JsonRpcState;
-use super::super::types::JsonRpcError;
+use super::super::types::{JsonRpcError, JsonRpcErrorExt};
 
 /// songbird.federation.peers
 pub async fn handle_federation_peers(state: &JsonRpcState) -> Result<Value, JsonRpcError> {

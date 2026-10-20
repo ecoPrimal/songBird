@@ -95,7 +95,7 @@ use std::sync::Arc;
 
 use songbird_http_client::{SecurityRpcClient, SongbirdHttpClient};
 
-use crate::ipc::pure_rust_server::JsonRpcError;
+use crate::ipc::pure_rust_server::{JsonRpcError, JsonRpcErrorExt};
 
 /// HTTP method enumeration
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -5,7 +5,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test assertions")]
 
-use super::types::{JsonRpcRequestWire, JsonRpcResponseWire};
+use super::types::{JsonRpcErrorExt, JsonRpcRequestWire, JsonRpcResponseExt, JsonRpcResponseWire};
 use super::*;
 use crate::endpoint::VirtualEndpoint;
 use crate::error::IpcError;
@@ -74,7 +74,7 @@ async fn test_json_rpc_request_creation() {
 
 #[tokio::test]
 async fn test_json_rpc_response_success() {
-    let resp = JsonRpcResponse::success(json!(42), json!(1));
+    let resp = JsonRpcResponse::success(json!(1), json!(42));
     assert_eq!(resp.jsonrpc, "2.0");
     assert_eq!(resp.result, Some(json!(42)));
     assert!(resp.error.is_none());
@@ -83,7 +83,7 @@ async fn test_json_rpc_response_success() {
 #[tokio::test]
 async fn test_json_rpc_response_error() {
     let err = JsonRpcError::internal_error("Test error");
-    let resp = JsonRpcResponse::error(err, json!(1));
+    let resp = JsonRpcResponse::error_from(err, json!(1));
     assert_eq!(resp.jsonrpc, "2.0");
     assert!(resp.result.is_none());
     assert!(resp.error.is_some());
@@ -129,12 +129,12 @@ fn json_rpc_error_helpers_and_serde() {
 
 #[test]
 fn json_rpc_response_roundtrip() {
-    let ok = JsonRpcResponse::success(json!(true), json!(7));
+    let ok = JsonRpcResponse::success(json!(7), json!(true));
     let s = serde_json::to_string(&ok).expect("ser");
     let back: JsonRpcResponse = serde_json::from_str(&s).expect("de");
     assert_eq!(back.result, Some(json!(true)));
 
-    let err = JsonRpcResponse::error(
+    let err = JsonRpcResponse::error_from(
         JsonRpcError {
             code: JsonRpcError::PARSE_ERROR,
             message: "parse".into(),

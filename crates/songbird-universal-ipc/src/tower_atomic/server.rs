@@ -4,7 +4,10 @@
 //! Tower Atomic JSON-RPC server: accepts IPC connections and dispatches methods.
 
 use super::JsonRpcHandler;
-use super::types::{JSONRPC_VERSION, JsonRpcError, JsonRpcRequestWire, JsonRpcResponse};
+use super::types::{
+    JSONRPC_VERSION, JsonRpcError, JsonRpcErrorExt, JsonRpcRequestWire, JsonRpcResponse,
+    JsonRpcResponseExt,
+};
 use crate::endpoint::VirtualEndpoint;
 use crate::error::{IpcError, IpcResult};
 use crate::ipc;
@@ -108,12 +111,9 @@ impl<H: JsonRpcHandler + 'static> TowerAtomicServer<H> {
                         Ok(req) => req,
                         Err(e) => {
                             let resp = JsonRpcResponse::error(
-                                JsonRpcError {
-                                    code: JsonRpcError::PARSE_ERROR,
-                                    message: format!("Failed to parse request: {e}"),
-                                    data: None,
-                                },
                                 Value::Null,
+                                JsonRpcError::PARSE_ERROR,
+                                format!("Failed to parse request: {e}"),
                             );
                             Self::write_response(&mut writer, &resp).await?;
                             continue;
@@ -189,19 +189,16 @@ impl<H: JsonRpcHandler + 'static> TowerAtomicServer<H> {
 
         if jsonrpc != JSONRPC_VERSION {
             return JsonRpcResponse::error(
-                JsonRpcError {
-                    code: JsonRpcError::INVALID_REQUEST,
-                    message: String::from("Invalid JSON-RPC version (must be 2.0)"),
-                    data: None,
-                },
                 id,
+                JsonRpcError::INVALID_REQUEST,
+                "Invalid JSON-RPC version (must be 2.0)",
             );
         }
 
         let params = params.unwrap_or(Value::Null);
         match handler.handle(method, params).await {
-            Ok(result) => JsonRpcResponse::success(result, id),
-            Err(message) => JsonRpcResponse::error(JsonRpcError::internal_error(message), id),
+            Ok(result) => JsonRpcResponse::success(id, result),
+            Err(message) => JsonRpcResponse::error_from(JsonRpcError::internal_error(message), id),
         }
     }
 }

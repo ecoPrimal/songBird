@@ -4,7 +4,7 @@
 use axum::http::StatusCode;
 use serde_json::Value;
 
-use super::super::types::JsonRpcError;
+use super::super::types::{JsonRpcError, JsonRpcErrorExt};
 
 pub(super) fn extract_str_param(params: Option<&Value>, key: &str) -> Result<String, JsonRpcError> {
     params

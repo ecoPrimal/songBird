@@ -4,7 +4,7 @@
 use serde_json::Value;
 
 use super::super::JsonRpcState;
-use super::super::types::JsonRpcError;
+use super::super::types::{JsonRpcError, JsonRpcErrorExt};
 
 /// songbird.services.list
 pub async fn handle_services_list(state: &JsonRpcState) -> Result<Value, JsonRpcError> {

@@ -4,6 +4,7 @@
 //! Mesh networking JSON-RPC dispatch (GAP-16: Tower Atomic Validation).
 
 use super::IpcHandlers;
+use crate::ipc::pure_rust_server::JsonRpcErrorExt;
 use songbird_types::json_rpc_method::MeshMethod;
 
 impl IpcHandlers {

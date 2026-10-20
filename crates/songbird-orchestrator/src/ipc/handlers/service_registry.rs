@@ -12,7 +12,7 @@ use std::time::SystemTime;
 use tracing::{debug, info};
 
 use crate::ipc::handlers::IpcHandlers;
-use crate::ipc::pure_rust_server::JsonRpcError;
+use crate::ipc::pure_rust_server::{JsonRpcError, JsonRpcErrorExt};
 use crate::ipc::types::{
     CapabilityResolveRequest, CapabilityResolveResponse, DiscoverByCapabilityRequest,
     DiscoverByCapabilityResponse, GetServiceHealthRequest, GetServiceHealthResponse,
@@ -492,7 +492,7 @@ mod tests {
     use super::*;
     use crate::app::connection_manager::ConnectionManager;
     use crate::ipc::handlers::IpcHandlers;
-    use crate::ipc::pure_rust_server::JsonRpcError;
+    use crate::ipc::pure_rust_server::{JsonRpcError, JsonRpcErrorExt};
     use crate::ipc::registry::ServiceRegistry;
     use songbird_http_client::SecurityRpcClient;
 

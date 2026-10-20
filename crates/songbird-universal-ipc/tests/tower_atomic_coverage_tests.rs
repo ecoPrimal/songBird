@@ -46,7 +46,9 @@
     reason = "test assertions and harness ergonomics"
 )]
 
-use songbird_universal_ipc::tower_atomic::{JsonRpcError, JsonRpcRequest, JsonRpcResponse};
+use songbird_universal_ipc::tower_atomic::{
+    JsonRpcError, JsonRpcErrorExt, JsonRpcRequest, JsonRpcResponse, JsonRpcResponseExt,
+};
 
 // ==================== JSON-RPC REQUEST ====================
 
@@ -106,7 +108,7 @@ fn test_jsonrpc_request_debug() {
 
 #[test]
 fn test_jsonrpc_response_success() {
-    let resp = JsonRpcResponse::success(serde_json::json!(42), serde_json::json!(1));
+    let resp = JsonRpcResponse::success(serde_json::json!(1), serde_json::json!(42));
     assert_eq!(resp.jsonrpc, "2.0");
     assert!(resp.result.is_some());
     assert!(resp.error.is_none());
@@ -116,7 +118,7 @@ fn test_jsonrpc_response_success() {
 #[test]
 fn test_jsonrpc_response_error() {
     let err = JsonRpcError::method_not_found("unknown.method");
-    let resp = JsonRpcResponse::error(err, serde_json::json!(1));
+    let resp = JsonRpcResponse::error_from(err, serde_json::json!(1));
     assert_eq!(resp.jsonrpc, "2.0");
     assert!(resp.result.is_none());
     assert!(resp.error.is_some());
@@ -126,7 +128,7 @@ fn test_jsonrpc_response_error() {
 
 #[test]
 fn test_jsonrpc_response_serialization_success() {
-    let resp = JsonRpcResponse::success(serde_json::json!("ok"), serde_json::json!(5));
+    let resp = JsonRpcResponse::success(serde_json::json!(5), serde_json::json!("ok"));
     let json = serde_json::to_string(&resp).unwrap();
     assert!(json.contains("\"result\":\"ok\""));
     assert!(!json.contains("\"error\""));
@@ -138,7 +140,7 @@ fn test_jsonrpc_response_serialization_success() {
 #[test]
 fn test_jsonrpc_response_serialization_error() {
     let err = JsonRpcError::internal_error("boom");
-    let resp = JsonRpcResponse::error(err, serde_json::json!(3));
+    let resp = JsonRpcResponse::error_from(err, serde_json::json!(3));
     let json = serde_json::to_string(&resp).unwrap();
     assert!(json.contains("\"error\""));
     assert!(!json.contains("\"result\""));
@@ -150,7 +152,7 @@ fn test_jsonrpc_response_serialization_error() {
 
 #[test]
 fn test_jsonrpc_response_clone() {
-    let resp = JsonRpcResponse::success(serde_json::json!({"a": 1}), serde_json::json!(1));
+    let resp = JsonRpcResponse::success(serde_json::json!(1), serde_json::json!({"a": 1}));
     let cloned = resp.clone();
     assert_eq!(resp.result, cloned.result);
     assert_eq!(resp.id, cloned.id);
@@ -246,7 +248,7 @@ fn test_jsonrpc_request_with_complex_params() {
 
 #[test]
 fn test_jsonrpc_response_with_null_result() {
-    let resp = JsonRpcResponse::success(serde_json::Value::Null, serde_json::json!(1));
+    let resp = JsonRpcResponse::success(serde_json::json!(1), serde_json::Value::Null);
     assert!(resp.result.is_some());
     assert_eq!(resp.result.unwrap(), serde_json::Value::Null);
 }
@@ -277,7 +279,7 @@ fn test_jsonrpc_roundtrip_error_response() {
             "context": {"file": "main.rs"}
         })),
     };
-    let resp = JsonRpcResponse::error(err, serde_json::json!("str-id"));
+    let resp = JsonRpcResponse::error_from(err, serde_json::json!("str-id"));
     let json = serde_json::to_string(&resp).unwrap();
     let de: JsonRpcResponse = serde_json::from_str(&json).unwrap();
     assert_eq!(de.id, serde_json::json!("str-id"));

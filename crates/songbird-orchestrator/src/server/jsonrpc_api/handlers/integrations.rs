@@ -6,7 +6,7 @@ use base64::Engine;
 use serde_json::Value;
 
 use super::super::JsonRpcState;
-use super::super::types::JsonRpcError;
+use super::super::types::{JsonRpcError, JsonRpcErrorExt};
 use super::common::{extract_str_param, jsonrpc_code_from_http_status, jsonrpc_from_compute_error};
 
 /// `compute.route` / `songbird.compute.schedule` — same handler as `POST /api/compute/task`

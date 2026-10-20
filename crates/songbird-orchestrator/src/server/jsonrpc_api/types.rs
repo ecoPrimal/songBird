@@ -1,74 +1,38 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2024-2026 ecoPrimals
 
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+//! JSON-RPC 2.0 types for the orchestrator's HTTP JSON-RPC API.
+//!
+//! Re-exports canonical types from `cellmembrane-types` and adds
+//! factory methods via [`JsonRpcErrorExt`] for concise error construction.
+
+// ── Canonical types ────────────────────────────────────────────────────
+pub use cellmembrane_types::{JsonRpcError, JsonRpcRequest, JsonRpcResponse};
 
 /// JSON-RPC 2.0 version string (static to avoid allocations)
 pub const JSONRPC_VERSION: &str = "2.0";
 
-/// JSON-RPC 2.0 Request
-/// <https://www.jsonrpc.org/specification#request_object>
-#[derive(Debug, Deserialize)]
-pub struct JsonRpcRequest {
-    /// JSON-RPC version (must be "2.0")
-    pub jsonrpc: String,
+// ── Extension: JsonRpcError factory methods ────────────────────────────
 
-    /// Method name to call
-    pub method: String,
-
-    /// Parameters (can be array or object)
-    #[serde(default)]
-    pub params: Option<Value>,
-
-    /// Request ID (for responses, null for notifications)
-    pub id: Option<Value>,
+/// Convenience factory methods for [`JsonRpcError`].
+///
+/// Import this trait to use `JsonRpcError::parse_error()`,
+/// `JsonRpcError::invalid_request(msg)`, etc.
+pub trait JsonRpcErrorExt {
+    /// Parse error (-32700).
+    fn parse_error() -> Self;
+    /// Invalid request (-32600).
+    fn invalid_request(message: impl Into<String>) -> Self;
+    /// Method not found (-32601).
+    fn method_not_found(method: impl Into<String>) -> Self;
+    /// Invalid params (-32602).
+    fn invalid_params(message: impl Into<String>) -> Self;
+    /// Internal error (-32603).
+    fn internal_error(message: impl Into<String>) -> Self;
 }
 
-/// JSON-RPC 2.0 Response
-/// <https://www.jsonrpc.org/specification#response_object>
-#[derive(Debug, Serialize)]
-pub struct JsonRpcResponse {
-    /// JSON-RPC version (always "2.0")
-    pub jsonrpc: String,
-
-    /// Result (on success)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub result: Option<Value>,
-
-    /// Error (on failure)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<JsonRpcError>,
-
-    /// Request ID (same as request, or null)
-    pub id: Value,
-}
-
-/// JSON-RPC 2.0 Error
-/// <https://www.jsonrpc.org/specification#error_object>
-#[derive(Debug, Serialize)]
-pub struct JsonRpcError {
-    /// Error code
-    pub code: i32,
-
-    /// Error message
-    pub message: String,
-
-    /// Additional error data
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<Value>,
-}
-
-/// Standard JSON-RPC error codes
-impl JsonRpcError {
-    pub const PARSE_ERROR: i32 = -32700;
-    pub const INVALID_REQUEST: i32 = -32600;
-    pub const METHOD_NOT_FOUND: i32 = -32601;
-    pub const INVALID_PARAMS: i32 = -32602;
-    pub const INTERNAL_ERROR: i32 = -32603;
-
-    #[must_use]
-    pub fn parse_error() -> Self {
+impl JsonRpcErrorExt for JsonRpcError {
+    fn parse_error() -> Self {
         Self {
             code: Self::PARSE_ERROR,
             message: String::from("Parse error"),
@@ -76,7 +40,7 @@ impl JsonRpcError {
         }
     }
 
-    pub fn invalid_request(message: impl Into<String>) -> Self {
+    fn invalid_request(message: impl Into<String>) -> Self {
         Self {
             code: Self::INVALID_REQUEST,
             message: message.into(),
@@ -84,15 +48,16 @@ impl JsonRpcError {
         }
     }
 
-    pub fn method_not_found(method: impl Into<String>) -> Self {
+    fn method_not_found(method: impl Into<String>) -> Self {
+        let method = method.into();
         Self {
             code: Self::METHOD_NOT_FOUND,
-            message: format!("Method not found: {}", method.into()),
+            message: format!("Method not found: {method}"),
             data: None,
         }
     }
 
-    pub fn invalid_params(message: impl Into<String>) -> Self {
+    fn invalid_params(message: impl Into<String>) -> Self {
         Self {
             code: Self::INVALID_PARAMS,
             message: message.into(),
@@ -100,7 +65,7 @@ impl JsonRpcError {
         }
     }
 
-    pub fn internal_error(message: impl Into<String>) -> Self {
+    fn internal_error(message: impl Into<String>) -> Self {
         Self {
             code: Self::INTERNAL_ERROR,
             message: message.into(),

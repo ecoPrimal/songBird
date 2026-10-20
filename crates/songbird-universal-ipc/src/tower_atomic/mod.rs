@@ -101,7 +101,8 @@ use serde_json::Value;
 pub use client::TowerAtomicClient;
 pub use server::TowerAtomicServer;
 pub use types::{
-    JSONRPC_VERSION, JsonRpcError, JsonRpcRequest, JsonRpcRequestWire, JsonRpcResponse,
+    JSONRPC_VERSION, JsonRpcError, JsonRpcErrorExt, JsonRpcRequest, JsonRpcRequestWire,
+    JsonRpcResponse, JsonRpcResponseExt,
 };
 
 /// JSON-RPC handler trait

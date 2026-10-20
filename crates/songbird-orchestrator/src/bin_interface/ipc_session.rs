@@ -9,7 +9,8 @@
 
 use songbird_universal_ipc::service::IpcServiceHandler;
 use songbird_universal_ipc::tower_atomic::{
-    JsonRpcError, JsonRpcHandler, JsonRpcRequest, JsonRpcResponse,
+    JsonRpcError, JsonRpcErrorExt, JsonRpcHandler, JsonRpcRequest, JsonRpcResponse,
+    JsonRpcResponseExt,
 };
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -43,26 +44,19 @@ pub(super) async fn dispatch_gated(
     };
 
     if let Some(auth_result) = dispatch_auth_method(&request.method, gate, &caller) {
-        return JsonRpcResponse::success(auth_result, id);
+        return JsonRpcResponse::success(id, auth_result);
     }
 
     if let Err(gate_err) = gate.check(&request.method, &caller) {
-        return JsonRpcResponse::error(
-            JsonRpcError {
-                code: gate_err.code,
-                message: gate_err.message,
-                data: gate_err.data,
-            },
-            id,
-        );
+        return JsonRpcResponse::error_from(gate_err, id);
     }
 
     match handler
         .handle(&request.method, request.params.take().unwrap_or(serde_json::Value::Null))
         .await
     {
-        Ok(result) => JsonRpcResponse::success(result, id),
-        Err(message) => JsonRpcResponse::error(JsonRpcError::internal_error(message), id),
+        Ok(result) => JsonRpcResponse::success(id, result),
+        Err(message) => JsonRpcResponse::error_from(JsonRpcError::internal_error(message), id),
     }
 }
 
@@ -234,8 +228,8 @@ async fn handle_json_rpc_lines<R, W>(
                         crate::ipc::btsp_phase3::handle_negotiate(&params, security_client).await;
 
                     let resp = JsonRpcResponse::success(
-                        serde_json::to_value(&result).unwrap_or_default(),
                         id,
+                        serde_json::to_value(&result).unwrap_or_default(),
                     );
                     if let Ok(json) = serde_json::to_string(&resp) {
                         let _ = writer.write_all(json.as_bytes()).await;
@@ -310,12 +304,9 @@ async fn handle_encrypted_json_rpc<R, W>(
             Ok(req) => req,
             Err(e) => {
                 let resp = JsonRpcResponse::error(
-                    JsonRpcError {
-                        code: JsonRpcError::PARSE_ERROR,
-                        message: format!("Failed to parse request: {e}"),
-                        data: None,
-                    },
                     serde_json::Value::Null,
+                    JsonRpcError::PARSE_ERROR,
+                    format!("Failed to parse request: {e}"),
                 );
                 if let Ok(resp_bytes) = serde_json::to_vec(&resp)
                     && let Ok(encrypted) = keys.encrypt(&resp_bytes)
@@ -358,12 +349,9 @@ async fn dispatch_json_rpc_line<W: tokio::io::AsyncWrite + Unpin>(
         Ok(req) => req,
         Err(e) => {
             let resp = JsonRpcResponse::error(
-                JsonRpcError {
-                    code: JsonRpcError::PARSE_ERROR,
-                    message: format!("Failed to parse request: {e}"),
-                    data: None,
-                },
                 serde_json::Value::Null,
+                JsonRpcError::PARSE_ERROR,
+                format!("Failed to parse request: {e}"),
             );
             if let Ok(json) = serde_json::to_string(&resp) {
                 let _ = writer.write_all(json.as_bytes()).await;

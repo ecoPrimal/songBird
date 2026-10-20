@@ -22,7 +22,7 @@
 use anyhow::Result;
 use tracing::info;
 
-use super::protocol::JsonRpcError;
+use super::protocol::{JsonRpcError, JsonRpcErrorExt};
 use songbird_http_client::SongbirdHttpClient;
 
 /// Handle `discover_capabilities` — return Songbird's advertised capabilities

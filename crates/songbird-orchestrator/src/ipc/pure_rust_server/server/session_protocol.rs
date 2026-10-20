@@ -22,7 +22,9 @@ use tokio::io::AsyncReadExt;
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt};
 use tracing::{debug, error, info};
 
-use super::super::protocol::{JsonRpcError, JsonRpcRequest, JsonRpcResponse};
+use super::super::protocol::{
+    JsonRpcError, JsonRpcErrorExt, JsonRpcRequest, JsonRpcResponse, JsonRpcResponseExt,
+};
 use super::UnixSocketServer;
 #[cfg(unix)]
 use crate::ipc::btsp;
@@ -103,7 +105,7 @@ impl UnixSocketServer {
             let request = match serde_json::from_slice::<JsonRpcRequest>(&payload) {
                 Ok(req) => req,
                 Err(e) => {
-                    let resp = JsonRpcResponse::error(
+                    let resp = JsonRpcResponse::error_from(
                         JsonRpcError::parse_error(format!("Failed to parse JSON-RPC request: {e}")),
                         serde_json::Value::Null,
                     );
@@ -119,7 +121,7 @@ impl UnixSocketServer {
                     btsp_phase3::handle_negotiate(&params, &self.security_client).await;
 
                 let resp =
-                    JsonRpcResponse::success(serde_json::to_value(&result).unwrap_or_default(), id);
+                    JsonRpcResponse::success(id, serde_json::to_value(&result).unwrap_or_default());
                 Self::write_btsp_response(&mut stream, &resp).await?;
 
                 if let Some(session_keys) = keys {
@@ -191,7 +193,7 @@ impl UnixSocketServer {
                     }
                 }
                 Err(e) => {
-                    let resp = JsonRpcResponse::error(
+                    let resp = JsonRpcResponse::error_from(
                         JsonRpcError::parse_error(format!("Failed to parse JSON-RPC request: {e}")),
                         serde_json::Value::Null,
                     );
@@ -241,7 +243,7 @@ impl UnixSocketServer {
                     let request = match serde_json::from_str::<JsonRpcRequest>(&line) {
                         Ok(req) => req,
                         Err(e) => {
-                            let resp = JsonRpcResponse::error(
+                            let resp = JsonRpcResponse::error_from(
                                 JsonRpcError::parse_error(format!(
                                     "Failed to parse JSON-RPC request: {e}"
                                 )),
@@ -262,8 +264,8 @@ impl UnixSocketServer {
                             btsp_phase3::handle_negotiate(&params, &self.security_client).await;
 
                         let resp = JsonRpcResponse::success(
-                            serde_json::to_value(&result).unwrap_or_default(),
                             id,
+                            serde_json::to_value(&result).unwrap_or_default(),
                         );
                         let mut payload = serde_json::to_vec(&resp)?;
                         payload.push(b'\n');
@@ -339,7 +341,7 @@ impl UnixSocketServer {
             let request = match serde_json::from_slice::<JsonRpcRequest>(&plaintext) {
                 Ok(req) => req,
                 Err(e) => {
-                    let resp = JsonRpcResponse::error(
+                    let resp = JsonRpcResponse::error_from(
                         JsonRpcError::parse_error(format!("Failed to parse JSON-RPC request: {e}")),
                         serde_json::Value::Null,
                     );

@@ -19,7 +19,7 @@ mod types;
 #[path = "jsonrpc_api_tests.rs"]
 mod tests;
 
-pub use types::{JsonRpcError, JsonRpcRequest, JsonRpcResponse};
+pub use types::{JsonRpcError, JsonRpcErrorExt, JsonRpcRequest, JsonRpcResponse};
 
 use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
 use serde_json::Value;

@@ -105,6 +105,9 @@ songbird-crypto-provider = { path = "../songbird-crypto-provider" }
 songbird-universal = { path = "../songbird-universal" }
 songbird-universal-ipc = { path = "../songbird-universal-ipc" }  # NEW (Jan 19, 2026): Universal IPC broker service
 songbird-onion-relay = { path = "../songbird-onion-relay" }  # Mesh endpoint types for overlay registration
+
+# Canonical ecosystem types (shared JSON-RPC, health, discovery)
+cellmembrane-types = { workspace = true }
 songbird-igd = { path = "../songbird-igd" }  # IGD router auto-configure (Feb 8, 2026)
 
 # Runtime

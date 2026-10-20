@@ -21,7 +21,9 @@ use super::handlers::{
     handle_service_register, handle_services_list, handle_task_create, handle_task_list,
     handle_version,
 };
-use super::{JsonRpcError, JsonRpcRequest, JsonRpcResponse, JsonRpcState, jsonrpc_routes};
+use super::{
+    JsonRpcError, JsonRpcErrorExt, JsonRpcRequest, JsonRpcResponse, JsonRpcState, jsonrpc_routes,
+};
 use crate::consent_management::ConsentManager;
 use crate::server::compute_api::ComputeApiState;
 use crate::server::deployment_api::DeploymentState;

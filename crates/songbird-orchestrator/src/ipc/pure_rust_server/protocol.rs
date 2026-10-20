@@ -3,50 +3,95 @@
 
 //! JSON-RPC 2.0 Protocol Types
 //!
-//! Pure Rust implementation of JSON-RPC 2.0 protocol types for inter-primal communication.
-//! These types provide standard JSON-RPC request/response handling with zero external dependencies.
+//! Re-exports canonical types from `cellmembrane-types` for inter-primal communication.
+//! Extension traits provide factory methods for concise error construction.
 
-use serde::{Deserialize, Serialize};
-
-/// JSON-RPC 2.0 Request
-#[derive(Debug, Clone, Deserialize)]
-pub struct JsonRpcRequest {
-    pub jsonrpc: String,
-    pub method: String,
-    #[serde(default)]
-    pub params: Option<serde_json::Value>,
-    pub id: Option<serde_json::Value>,
-}
+// ── Canonical types ────────────────────────────────────────────────────
+pub use cellmembrane_types::{JsonRpcError, JsonRpcRequest, JsonRpcResponse};
 
 /// JSON-RPC 2.0 version string.
-const JSONRPC_VERSION: &str = "2.0";
+pub const JSONRPC_VERSION: &str = "2.0";
 
-/// JSON-RPC 2.0 Response
-#[derive(Debug, Clone, Serialize)]
-pub struct JsonRpcResponse {
-    pub jsonrpc: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub result: Option<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<JsonRpcError>,
-    pub id: serde_json::Value,
+// ── Extension: JsonRpcError factory methods ────────────────────────────
+
+/// Convenience factory methods for [`JsonRpcError`] used by the IPC protocol.
+pub trait JsonRpcErrorExt {
+    /// Create a parse error with a custom message.
+    fn parse_error(message: impl Into<String>) -> Self;
+    /// Create an invalid request error.
+    fn invalid_request(message: impl Into<String>) -> Self;
+    /// Create a method not found error.
+    fn method_not_found(method: impl Into<String>) -> Self;
+    /// Create an invalid params error.
+    fn invalid_params(message: impl Into<String>) -> Self;
+    /// Create an internal error.
+    fn internal_error(message: impl Into<String>) -> Self;
+    /// Create a custom error with code, message, and optional data.
+    fn custom(code: i32, message: impl Into<String>, data: Option<String>) -> Self;
 }
 
-impl JsonRpcResponse {
-    /// Create a success response.
-    #[must_use]
-    pub fn success(result: serde_json::Value, id: serde_json::Value) -> Self {
+impl JsonRpcErrorExt for JsonRpcError {
+    fn parse_error(message: impl Into<String>) -> Self {
         Self {
-            jsonrpc: JSONRPC_VERSION.to_owned(),
-            result: Some(result),
-            error: None,
-            id,
+            code: Self::PARSE_ERROR,
+            message: message.into(),
+            data: None,
         }
     }
 
-    /// Create an error response.
-    #[must_use]
-    pub fn error(error: JsonRpcError, id: serde_json::Value) -> Self {
+    fn invalid_request(message: impl Into<String>) -> Self {
+        Self {
+            code: Self::INVALID_REQUEST,
+            message: message.into(),
+            data: None,
+        }
+    }
+
+    fn method_not_found(method: impl Into<String>) -> Self {
+        let method = method.into();
+        Self {
+            code: Self::METHOD_NOT_FOUND,
+            message: format!("Method not found: {method}"),
+            data: None,
+        }
+    }
+
+    fn invalid_params(message: impl Into<String>) -> Self {
+        Self {
+            code: Self::INVALID_PARAMS,
+            message: message.into(),
+            data: None,
+        }
+    }
+
+    fn internal_error(message: impl Into<String>) -> Self {
+        Self {
+            code: Self::INTERNAL_ERROR,
+            message: message.into(),
+            data: None,
+        }
+    }
+
+    fn custom(code: i32, message: impl Into<String>, data: Option<String>) -> Self {
+        Self {
+            code,
+            message: message.into(),
+            data: data.map(serde_json::Value::String),
+        }
+    }
+}
+
+// ── Extension: JsonRpcResponse with pre-built error ────────────────────
+
+/// Convenience factory for [`JsonRpcResponse`] that accepts a pre-built
+/// [`JsonRpcError`] (canonical `error()` inlines code+message instead).
+pub trait JsonRpcResponseExt {
+    /// Build an error response from a pre-constructed [`JsonRpcError`].
+    fn error_from(error: JsonRpcError, id: serde_json::Value) -> Self;
+}
+
+impl JsonRpcResponseExt for JsonRpcResponse {
+    fn error_from(error: JsonRpcError, id: serde_json::Value) -> Self {
         Self {
             jsonrpc: JSONRPC_VERSION.to_owned(),
             result: None,
@@ -56,85 +101,11 @@ impl JsonRpcResponse {
     }
 }
 
-/// JSON-RPC 2.0 Error
-#[derive(Debug, Clone, Serialize)]
-pub struct JsonRpcError {
-    pub code: i32,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<serde_json::Value>,
-}
-
-impl JsonRpcError {
-    /// Standard JSON-RPC 2.0 error codes
-    pub const PARSE_ERROR: i32 = -32700;
-    pub const INVALID_REQUEST: i32 = -32600;
-    pub const METHOD_NOT_FOUND: i32 = -32601;
-    pub const INVALID_PARAMS: i32 = -32602;
-    pub const INTERNAL_ERROR: i32 = -32603;
-
-    /// Create a parse error
-    pub fn parse_error(message: impl Into<String>) -> Self {
-        Self {
-            code: Self::PARSE_ERROR,
-            message: message.into(),
-            data: None,
-        }
-    }
-
-    /// Create an invalid request error (e.g. wrong or missing `jsonrpc` version).
-    pub fn invalid_request(message: impl Into<String>) -> Self {
-        Self {
-            code: Self::INVALID_REQUEST,
-            message: message.into(),
-            data: None,
-        }
-    }
-
-    /// Create a method not found error
-    pub fn method_not_found(method: impl Into<String>) -> Self {
-        Self {
-            code: Self::METHOD_NOT_FOUND,
-            message: format!("Method not found: {}", method.into()),
-            data: None,
-        }
-    }
-
-    /// Create an invalid params error
-    pub fn invalid_params(message: impl Into<String>) -> Self {
-        Self {
-            code: Self::INVALID_PARAMS,
-            message: message.into(),
-            data: None,
-        }
-    }
-
-    /// Create an internal error
-    pub fn internal_error(message: impl Into<String>) -> Self {
-        Self {
-            code: Self::INTERNAL_ERROR,
-            message: message.into(),
-            data: None,
-        }
-    }
-
-    /// Create a custom error with code, message, and optional data
-    ///
-    /// This is a compatibility helper for migrating from `jsonrpsee::types::ErrorObject::owned`
-    pub fn custom(code: i32, message: impl Into<String>, data: Option<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-            data: data.map(serde_json::Value::String),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, reason = "unit tests")]
 
-    use super::{JsonRpcError, JsonRpcRequest, JsonRpcResponse};
+    use super::{JsonRpcError, JsonRpcErrorExt, JsonRpcRequest, JsonRpcResponse, JsonRpcResponseExt};
 
     #[test]
     fn json_rpc_request_roundtrip_with_params_and_string_id() {
@@ -148,7 +119,6 @@ mod tests {
 
     #[test]
     fn json_rpc_request_null_id_deserializes_to_none() {
-        // `serde_json` maps JSON `null` for `Option<Value>` to `None` (not `Some(Null)`).
         let json = r#"{"jsonrpc":"2.0","method":"ping","id":null}"#;
         let req: JsonRpcRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.method, "ping");

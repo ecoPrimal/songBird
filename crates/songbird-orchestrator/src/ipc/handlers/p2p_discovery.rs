@@ -9,7 +9,7 @@
 //! v3.22.1: Extracted from monolithic handlers.rs (Jan 12, 2026)
 
 use super::IpcHandlers;
-use crate::ipc::pure_rust_server::JsonRpcError;
+use crate::ipc::pure_rust_server::{JsonRpcError, JsonRpcErrorExt};
 use crate::ipc::types::{
     AnnounceCapabilitiesRequest, AnnounceCapabilitiesResponse, CreateGeneticTunnelRequest,
     CreateGeneticTunnelResponse, DiscoverByFamilyRequest, DiscoverByFamilyResponse, DiscoveredNode,
@@ -406,7 +406,7 @@ mod tests {
     };
     use crate::app::connection_manager::ConnectionManager;
     use crate::ipc::handlers::IpcHandlers;
-    use crate::ipc::pure_rust_server::JsonRpcError;
+    use crate::ipc::pure_rust_server::{JsonRpcError, JsonRpcErrorExt};
     use crate::ipc::registry::ServiceRegistry;
     use songbird_discovery::anonymous::DiscoveredPeer;
     use songbird_http_client::SecurityRpcClient;

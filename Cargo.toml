@@ -116,6 +116,9 @@ workspace = true
 [workspace.dependencies]
 songbird-process-env = { path = "crates/songbird-process-env" }
 
+# Canonical ecosystem types (shared across all organisms)
+cellmembrane-types = { path = "../../gardens/cellMembrane/crates/cellmembrane-types" }
+
 # Async
 tokio = { version = "1.48", features = [
     "rt-multi-thread", "net", "io-util", "macros",

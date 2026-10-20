@@ -12,7 +12,7 @@ use super::IpcHandlers;
 use crate::graph::{
     AlternativeSuggestions, AvailabilityReport, CoordinationValidationResult, ValidationResult,
 };
-use crate::ipc::pure_rust_server::JsonRpcError;
+use crate::ipc::pure_rust_server::{JsonRpcError, JsonRpcErrorExt};
 use tracing::{debug, info};
 
 // ============================================================================
@@ -236,7 +236,7 @@ mod tests {
     use crate::app::connection_manager::ConnectionManager;
     use crate::graph::{Graph, GraphMetadata, GraphNode};
     use crate::ipc::handlers::IpcHandlers;
-    use crate::ipc::pure_rust_server::JsonRpcError;
+    use crate::ipc::pure_rust_server::{JsonRpcError, JsonRpcErrorExt};
     use crate::ipc::registry::ServiceRegistry;
     use songbird_http_client::SecurityRpcClient;
 
