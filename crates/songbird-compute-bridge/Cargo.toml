@@ -32,6 +32,6 @@ songbird-http-client = { path = "../songbird-http-client" }  # ✅ 100% Pure Rus
 workspace = true
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["full", "test-util"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "io-util", "time", "test-util"] }
 tower = { workspace = true, features = ["util"] }
 
